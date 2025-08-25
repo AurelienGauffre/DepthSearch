@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-"""
-
-"""
 
 import math
 from pathlib import Path
@@ -15,6 +12,7 @@ from dataloading import load_bathy, BathyDataset
 from plotting import (
     plot_map_with_points, plot_profile_match,
     setup_matplotlib_theme, plot_mse_map, plot_topk_starts_on_map,
+    plot_accuracy_vs_param,
 )
 from trajectory import (
     line_samples, in_bounds,
@@ -25,11 +23,6 @@ from solver import (
     solverGridSearch,
 )
 
-
-
-# -------------------------
-# MAIN
-# -------------------------
 if __name__ == "__main__":
     # This main function essentially runs 2 nested loops : s different scenarios with v sweep values
     out_dir = Path(CONFIG.out_dir)
@@ -111,9 +104,9 @@ if __name__ == "__main__":
                                           ylims=ylims_profiles, xlims=xlims_profiles)
             fig_prof.savefig(out_dir / f"profile_s{si:02d}_{sweep_param}_{v}.png"); plt.close(fig_prof)
 
-            fig_mse = plot_mse_map(depth_map, valid_mask, x0_grid, y0_grid, mse_map,
-                                   title=f"MSE map | {subtitle}")
-            fig_mse.savefig(out_dir / f"mse_map_s{si:02d}_{sweep_param}_{v}.png"); plt.close(fig_mse)
+            # fig_mse = plot_mse_map(depth_map, valid_mask, x0_grid, y0_grid, mse_map,
+            #                        title=f"MSE map | {subtitle}")
+            # fig_mse.savefig(out_dir / f"mse_map_s{si:02d}_{sweep_param}_{v}.png"); plt.close(fig_mse)
 
             fig_topk = plot_topk_starts_on_map(depth_map, valid_mask, traj, topk, subtitle, k=5)
             fig_topk.savefig(out_dir / f"topk_starts_s{si:02d}_{sweep_param}_{v}.png"); plt.close(fig_topk)
@@ -133,13 +126,7 @@ if __name__ == "__main__":
         print(f"  {sweep_param}={v} → accuracy={acc:.3f}")
 
     # Plot accuracy vs param
-    setup_matplotlib_theme()
-    fig, ax = plt.subplots(figsize=(10, 4.5))
-    ax.plot(sweep_values, accuracies, marker="o")
-    ax.set_xlabel(sweep_param)
-    ax.set_ylabel("Accuracy (≤ 2×grid stride)")
-    ax.set_ylim(0.0, 1.05)
-    ax.grid(True)
+    fig = plot_accuracy_vs_param(sweep_param, sweep_values, accuracies)
     fig.savefig(out_dir / f"accuracy_vs_{sweep_param}.png"); plt.close(fig)
 
-    print(f"\n[main] Done. Results in {out_dir.resolve()}")
+    print(f"Done. Results in {out_dir.resolve()}")

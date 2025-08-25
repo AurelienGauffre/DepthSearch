@@ -246,6 +246,24 @@ def plot_topk_starts_on_map(depth_map, mask, true_traj, topk, subtitle, k: int =
     return fig
 
 
+    def plot_accuracy_vs_param(sweep_param: str,
+                               sweep_values,
+                               accuracies,
+                               ylabel: str = "Accuracy (≤ 2×grid stride)"):
+        """Line plot of accuracy vs. a swept parameter.
+
+        Returns the Matplotlib figure; caller is responsible for saving/closing.
+        """
+        setup_matplotlib_theme()
+        fig, ax = plt.subplots(figsize=(10, 4.5))
+        ax.plot(sweep_values, accuracies, marker="o")
+        ax.set_xlabel(sweep_param)
+        ax.set_ylabel(ylabel)
+        ax.set_ylim(0.0, 1.05)
+        ax.grid(True)
+        return fig
+
+
 def mse_to_probability_map(mse_map: np.ndarray,
                            valid_grid_mask: np.ndarray,
                            temperature: float = 1.0) -> np.ndarray:
