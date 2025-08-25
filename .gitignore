@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual envs
+.env/
+.venv/
+\.venv/
+
+# IDE
+.vscode/
+
+# Outputs
+figures_config/
+*.gif
+*.png
+full_map.png
+all.txt
+w.py
+
+# Data
+data/
+
+# Python build metadata
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db

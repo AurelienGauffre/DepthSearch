@@ -1,0 +1,22 @@
+[project]
+name = "depthsearch2"
+version = "0.1.0"
+description = "Depth-only localization demo using bathymetry and sonar depth profiles"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Aurelien" }]
+dependencies = [
+  "numpy",
+  "matplotlib",
+  "rasterio",
+  "pillow",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# This repository is a script-based project, not a package. Avoid auto discovery.
+packages = []
