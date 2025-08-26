@@ -5,9 +5,12 @@ mask checks, and trajectory generation with noise.
 """
 
 import math
-from typing import Optional, Tuple
-
+from typing import Optional, Tuple, Any
+import rasterio
 import numpy as np
+
+from rasterio.warp import transform as rasterio_transform
+from rasterio.crs import CRS
 
 
 def line_samples(x0: float, y0: float, theta: float, step: float, n: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -159,3 +162,34 @@ def compute_valid_grid_mask(
                 continue
             mask[yi, xi] = True
     return mask
+
+
+def pixel_to_latlon(transform: Any, crs: Any, col: float, row: float) -> Tuple[float, float]:
+    """
+    Convert pixel coordinates to lat/lon (WGS84).
+    """
+    if transform is None or crs is None:
+        raise RuntimeError("Transform or CRS is None")
+    
+    # Convert pixel to projected coordinates
+    x, y = transform * (col, row)
+    # Convert to lat/lon (WGS84)
+    dst_crs = CRS.from_epsg(4326)
+    lon, lat = rasterio_transform(crs, dst_crs, [x], [y])
+    
+    return float(lat[0]), float(lon[0])
+
+
+def latlon_to_pixel(transform: Any, crs: Any, lat: float, lon: float) -> Tuple[float, float]:
+    """
+    Convert lat/lon (WGS84) to pixel coordinates.
+    """
+    # Convert lat/lon to projected coordinates
+    src_crs = CRS.from_epsg(4326)
+    x, y = rasterio_transform(src_crs, crs, [lon], [lat])
+    
+    # Convert projected coordinates to pixels
+    inv_transform = ~transform
+    col, row = inv_transform * (x[0], y[0])
+    
+    return float(col), float(row)
