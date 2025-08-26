@@ -115,6 +115,8 @@ def plot_map_with_points(depth_map, mask, true_traj, est, subtitle):
             ax.imshow(overlay, origin="upper", interpolation="nearest")
 
     ax.set_title("True (+) & Predicted (×) starts\n" + subtitle)
+    ax.set_xlabel("Pixels (Est →)")
+    ax.set_ylabel("Pixels (Sud ↓)")
     ax.set_aspect('equal')
     _legend_with_bg(ax)
     return fig
@@ -220,8 +222,8 @@ def plot_mse_map(depth_map: np.ndarray,
             ax.imshow(overlay, origin="lower", interpolation="nearest")
 
     ax.set_title(title)
-    ax.set_xlabel("x (px)")
-    ax.set_ylabel("y (px)")
+    ax.set_xlabel("Pixels (Est →)")
+    ax.set_ylabel("Pixels (Sud ↓)")
     ax.set_aspect('equal')
     return fig
 
@@ -270,6 +272,8 @@ def plot_topk_starts_on_map(depth_map, mask, true_traj, topk, subtitle, k=5):
                            label=label)
 
     ax.set_title("Top-K candidate starts and trajectory\n" + subtitle)
+    ax.set_xlabel("Pixels (Est →)")
+    ax.set_ylabel("Pixels (Sud ↓)")
     ax.set_aspect('equal')
     
     # Create legend with 20% smaller font size and smaller markers
