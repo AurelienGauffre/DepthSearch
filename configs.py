@@ -51,11 +51,10 @@ class SimConfig:
      # --- Optional cropping for raster mode ---
     crop_enable: bool = True
     crop_by: str = "px"           # "px" or "crs"
-    crop_x1: float = 1000 #3000
-    crop_x2: float = 4000
-    crop_y1: float = 3500 #3500
-    crop_y2: float = 5500 #5500
-
+    crop_x1: float = 1200 
+    crop_x2: float = 4600
+    crop_y1: float = 5000
+    crop_y2: float = 7400
 
     # Batch / Sweep controls
     sweep_param: str = "n_samples"
