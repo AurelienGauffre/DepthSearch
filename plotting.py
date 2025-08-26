@@ -6,6 +6,20 @@ Plotting utilities (no globals). Pass the mask you want to overlay.
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+
+
+def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=256):
+    """Return a truncated version of a colormap"""
+    new_cmap = mcolors.LinearSegmentedColormap.from_list(
+        f'trunc({cmap.name},{minval:.2f},{maxval:.2f})',
+        cmap(np.linspace(minval, maxval, n))
+    )
+    return new_cmap
+
+
+# Create custom truncated viridis (cut at 80% - remove top 20%)
+viridis_custom = truncate_colormap(plt.cm.viridis, 0.0, 0.8)
 
 
 def setup_matplotlib_theme():
@@ -38,10 +52,25 @@ def _legend_with_bg(ax, loc="upper right"):
     return leg
 
 
+def _get_bathy_color_scale(depth_map: np.ndarray, max_alt: float = 0.0):
+    """Calculate a reasonable color scale for bathymetry.
+    """
+    finite_depths = depth_map[np.isfinite(depth_map)]
+    if len(finite_depths) == 0:
+        return -200, max_alt
+    
+    vmin = float(np.min(finite_depths))  # Maximum depth found
+    vmax = min(float(np.max(finite_depths)), max_alt)  # Limited to max_alt
+    
+    return vmin, vmax
+
+
 def plot_full_map(depth_map: np.ndarray, mask: np.ndarray, out_path: str):
     setup_matplotlib_theme()
     fig, ax = plt.subplots()
-    im = ax.imshow(depth_map, cmap="viridis", origin="lower", interpolation="nearest")
+    vmin, vmax = _get_bathy_color_scale(depth_map)
+    im = ax.imshow(depth_map, cmap=viridis_custom, origin="upper", interpolation="nearest", 
+                   vmin=vmin, vmax=vmax)
     cb = fig.colorbar(im, ax=ax, shrink=0.9)
     cb.set_label("Depth (m)")
     ax.set_title("Full bathymetry with mask")
@@ -63,7 +92,9 @@ def plot_full_map(depth_map: np.ndarray, mask: np.ndarray, out_path: str):
 def plot_map_with_points(depth_map, mask, true_traj, est, subtitle):
     setup_matplotlib_theme()
     fig, ax = plt.subplots()
-    im = ax.imshow(depth_map, origin="lower", cmap="viridis", interpolation="nearest")
+    vmin, vmax = _get_bathy_color_scale(depth_map)
+    im = ax.imshow(depth_map, origin="upper", cmap=viridis_custom, interpolation="nearest",
+                   vmin=vmin, vmax=vmax)
     fig.colorbar(im, ax=ax, shrink=0.9).set_label("Depth (m)")
 
     # True start: orange plus
@@ -81,7 +112,7 @@ def plot_map_with_points(depth_map, mask, true_traj, est, subtitle):
         if land.any():
             overlay = np.zeros((depth_map.shape[0], depth_map.shape[1], 4), dtype=float)
             overlay[land] = [1.0, 0.0, 0.0, 0.25]
-            ax.imshow(overlay, origin="lower", interpolation="nearest")
+            ax.imshow(overlay, origin="upper", interpolation="nearest")
 
     ax.set_title("True (+) & Predicted (×) starts\n" + subtitle)
     ax.set_aspect('equal')
@@ -132,12 +163,6 @@ def plot_mse_map(depth_map: np.ndarray,
                  title: str = "MSE map"):
     """Visualize the MSE values computed on a sparse (x0_grid, y0_grid) as a
     continuous overlay using imshow with proper extents over the bathymetry.
-
-    - depth_map: HxW bathymetry array (for sizing/background alignment)
-    - mask: HxW boolean array (True=water), optional for land overlay
-    - x0_grid, y0_grid: 1D arrays of grid coordinates (pixel indices)
-    - mse_map: 2D array with shape (len(y0_grid), len(x0_grid)) possibly with NaNs
-    - title: plot title
     """
     setup_matplotlib_theme()
     H, W = depth_map.shape
@@ -145,7 +170,9 @@ def plot_mse_map(depth_map: np.ndarray,
     fig, ax = plt.subplots()
 
     # Background bathymetry for context (subtle grayscale)
-    ax.imshow(depth_map, origin="lower", cmap="gray", alpha=0.35, interpolation="nearest")
+    vmin, vmax = _get_bathy_color_scale(depth_map)
+    ax.imshow(depth_map, origin="lower", cmap="gray", alpha=0.35, interpolation="nearest",
+              vmin=vmin, vmax=vmax)
 
     # Robust color scaling from finite MSE values
     finite = mse_map[np.isfinite(mse_map)]
@@ -199,7 +226,7 @@ def plot_mse_map(depth_map: np.ndarray,
     return fig
 
 
-def plot_topk_starts_on_map(depth_map, mask, true_traj, topk, subtitle, k: int = 5):
+def plot_topk_starts_on_map(depth_map, mask, true_traj, topk, subtitle, k=5):
     """Plot classical depth map with:
     - true start (+)
     - top-K candidate start positions (small black circles)
@@ -208,7 +235,9 @@ def plot_topk_starts_on_map(depth_map, mask, true_traj, topk, subtitle, k: int =
     """
     setup_matplotlib_theme()
     fig, ax = plt.subplots()
-    im = ax.imshow(depth_map, origin="lower", cmap="viridis", interpolation="nearest")
+    vmin, vmax = _get_bathy_color_scale(depth_map)
+    im = ax.imshow(depth_map, origin="upper", cmap=viridis_custom, interpolation="nearest",
+                   vmin=vmin, vmax=vmax)
     fig.colorbar(im, ax=ax, shrink=0.9).set_label("Depth (m)")
 
     # True trajectory path (small black stars)
@@ -224,7 +253,7 @@ def plot_topk_starts_on_map(depth_map, mask, true_traj, topk, subtitle, k: int =
         if np.any(land):
             overlay = np.zeros((depth_map.shape[0], depth_map.shape[1], 4), dtype=float)
             overlay[land] = [1.0, 0.0, 0.0, 0.25]
-            ax.imshow(overlay, origin="lower", interpolation="nearest")
+            ax.imshow(overlay, origin="upper", interpolation="nearest")
 
     # Top-K candidate starts
     if topk:
@@ -242,26 +271,32 @@ def plot_topk_starts_on_map(depth_map, mask, true_traj, topk, subtitle, k: int =
 
     ax.set_title("Top-K candidate starts and trajectory\n" + subtitle)
     ax.set_aspect('equal')
-    _legend_with_bg(ax)
+    
+    # Create legend with 20% smaller font size and smaller markers
+    leg = ax.legend(loc="upper right", frameon=True, fontsize='small', prop={'size': 8.8}, markerscale=0.8)
+    if leg is not None:
+        leg.get_frame().set_facecolor((1, 1, 1, 0.7))
+        leg.get_frame().set_edgecolor("none")
+    
     return fig
 
 
-    def plot_accuracy_vs_param(sweep_param: str,
-                               sweep_values,
-                               accuracies,
-                               ylabel: str = "Accuracy (≤ 2×grid stride)"):
-        """Line plot of accuracy vs. a swept parameter.
+def plot_accuracy_vs_param(sweep_param: str,
+                           sweep_values,
+                           accuracies,
+                           ylabel: str = "Accuracy (≤ 2×grid stride)"):
+    """Line plot of accuracy vs. a swept parameter.
 
-        Returns the Matplotlib figure; caller is responsible for saving/closing.
-        """
-        setup_matplotlib_theme()
-        fig, ax = plt.subplots(figsize=(10, 4.5))
-        ax.plot(sweep_values, accuracies, marker="o")
-        ax.set_xlabel(sweep_param)
-        ax.set_ylabel(ylabel)
-        ax.set_ylim(0.0, 1.05)
-        ax.grid(True)
-        return fig
+    Returns the Matplotlib figure; caller is responsible for saving/closing.
+    """
+    setup_matplotlib_theme()
+    fig, ax = plt.subplots(figsize=(10, 4.5))
+    ax.plot(sweep_values, accuracies, marker="o")
+    ax.set_xlabel(sweep_param)
+    ax.set_ylabel(ylabel)
+    ax.set_ylim(0.0, 1.05)
+    ax.grid(True)
+    return fig
 
 
 def mse_to_probability_map(mse_map: np.ndarray,
@@ -359,4 +394,4 @@ def plot_probability_map(depth_map: np.ndarray,
     return fig
 
 
- 
+
