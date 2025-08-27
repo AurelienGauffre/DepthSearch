@@ -1,8 +1,7 @@
 # ⛵Depth-Only Localization
 **Can you locate a boat precisely without GPS, using only a few measurements from an onboard depth sensor?**
 
-![all](https://github.com/user-attachments/assets/9453d613-16bf-4021-bbeb-de5775d27d11)
-
+![all](https://github.com/user-attachments/assets/634e3127-f3fc-405e-ad67-7e3cd94c62c2)
 
 
 This project explores that idea: given a real bathymetric map and a short sequence the depth sensors readings, we attempt to recover the boat’s position by matching depth profiles on high resolution depths maps. After demonstrating the feasibility of this approach with a realistic modeling of the different errors, the next objective is to develop efficient methods to achieve real-time localization.
