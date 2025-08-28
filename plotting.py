@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
 Plotting utilities (no globals). Pass the mask you want to overlay.
+
+Note: All plots use origin="upper" consistently, meaning:
+- Y-axis points downward (South)
+- Pixel (0, 0) is at the top-left corner
+- This matches the standard image coordinate system
 """
 
 import numpy as np
@@ -83,7 +88,7 @@ def plot_full_map(depth_map: np.ndarray, mask: np.ndarray, out_path: str):
         if land.any():
             overlay = np.zeros((depth_map.shape[0], depth_map.shape[1], 4), dtype=float)
             overlay[land] = [1.0, 0.0, 0.0, 0.35]
-            ax.imshow(overlay, origin="lower", interpolation="nearest")
+            ax.imshow(overlay, origin="upper", interpolation="nearest")
 
     fig.savefig(out_path)
     plt.close(fig)
@@ -156,76 +161,6 @@ def plot_profile_match(z_meas, est, z_true, using_bias, ylims, xlims):
     _legend_with_bg(ax, loc="best")
     return fig
 
-
-def plot_mse_map(depth_map: np.ndarray,
-                 mask: np.ndarray,
-                 x0_grid: np.ndarray,
-                 y0_grid: np.ndarray,
-                 mse_map: np.ndarray,
-                 title: str = "MSE map"):
-    """Visualize the MSE values computed on a sparse (x0_grid, y0_grid) as a
-    continuous overlay using imshow with proper extents over the bathymetry.
-    """
-    setup_matplotlib_theme()
-    H, W = depth_map.shape
-
-    fig, ax = plt.subplots()
-
-    # Background bathymetry for context (subtle grayscale)
-    vmin, vmax = _get_bathy_color_scale(depth_map)
-    ax.imshow(depth_map, origin="lower", cmap="gray", alpha=0.35, interpolation="nearest",
-              vmin=vmin, vmax=vmax)
-
-    # Robust color scaling from finite MSE values
-    finite = mse_map[np.isfinite(mse_map)]
-    if finite.size == 0:
-        # Nothing to show; present background with a note
-        ax.text(0.5, 0.5, "No MSE values (all NaN)", transform=ax.transAxes,
-                ha="center", va="center", fontsize=12, bbox=dict(facecolor="white", alpha=0.7, edgecolor="none"))
-        ax.set_title(title)
-        ax.set_xlabel("x (px)")
-        ax.set_ylabel("y (px)")
-        ax.set_aspect('equal')
-        return fig
-
-    if finite.size >= 20:
-        vmin, vmax = np.nanpercentile(finite, [5, 95])
-        if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
-            vmin, vmax = float(np.nanmin(finite)), float(np.nanmax(finite))
-    else:
-        vmin, vmax = float(np.nanmin(finite)), float(np.nanmax(finite))
-    if vmin == vmax:
-        vmax = vmin + 1e-6
-
-    # Colormap with transparent NaNs so non-evaluated grid cells show background
-    cmap = plt.get_cmap("magma").copy()
-    cmap.set_bad((0, 0, 0, 0))
-
-    # Map the (rows, cols) of mse_map onto pixel-space using extent
-    # Assumes x0_grid and y0_grid are sorted ascending and represent pixel indices
-    extent = [float(x0_grid[0]) - 0.5,
-              float(x0_grid[-1]) + 0.5,
-              float(y0_grid[0]) - 0.5,
-              float(y0_grid[-1]) + 0.5]
-
-    im = ax.imshow(mse_map, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax,
-                   interpolation="nearest", extent=extent, alpha=0.95)
-    cb = fig.colorbar(im, ax=ax, shrink=0.9)
-    cb.set_label("MSE")
-
-    # Subtle land overlay on top
-    if mask is not None:
-        land = ~mask
-        if np.any(land):
-            overlay = np.zeros((H, W, 4), dtype=float)
-            overlay[land] = [1.0, 0.0, 0.0, 0.15]
-            ax.imshow(overlay, origin="lower", interpolation="nearest")
-
-    ax.set_title(title)
-    ax.set_xlabel("Pixels (Est →)")
-    ax.set_ylabel("Pixels (Sud ↓)")
-    ax.set_aspect('equal')
-    return fig
 
 
 def plot_topk_starts_on_map(depth_map, mask, true_traj, topk, subtitle, k=5):
@@ -303,99 +238,7 @@ def plot_accuracy_vs_param(sweep_param: str,
     return fig
 
 
-def mse_to_probability_map(mse_map: np.ndarray,
-                           valid_grid_mask: np.ndarray,
-                           temperature: float = 1.0) -> np.ndarray:
-    """Convert MSE values on the grid to a normalized probability map.
 
-    Uses a softmax-like transform p ∝ exp(-(mse - m_min)/T) on finite/valid cells.
-    Returns an array of same shape as mse_map, zeros elsewhere, sum≈1 over valid.
-    """
-    prob = np.zeros_like(mse_map, dtype=float)
-    if mse_map.size == 0:
-        return prob
-    mask = np.isfinite(mse_map)
-    if valid_grid_mask is not None:
-        mask = mask & valid_grid_mask
-    vals = mse_map[mask]
-    if vals.size == 0:
-        return prob
-    m_min = float(np.nanmin(vals))
-    T = max(float(temperature), 1e-6)
-    logits = - (vals - m_min) / T
-    logits -= float(np.max(logits))  # stabilize
-    exps = np.exp(logits)
-    Z = float(np.sum(exps))
-    if Z <= 0.0 or not np.isfinite(Z):
-        return prob
-    prob_vals = (exps / Z)
-    prob[mask] = prob_vals
-    return prob
-
-
-def plot_probability_map(depth_map: np.ndarray,
-                         mask: np.ndarray,
-                         prob_map: np.ndarray,
-                         x0_grid: np.ndarray,
-                         y0_grid: np.ndarray,
-                         topk,
-                         true_traj,
-                         title: str = "Probability map (where we are)"):
-    """Plot probability over start positions with requested styling, plus markers:
-    - grayscale: black=0, white=max probability
-    - top-5 predictions: small identical black circles at candidate end points
-    - best (most probable) candidate end point: red cross
-    - true current point and true trajectory so far
-    """
-    setup_matplotlib_theme()
-    H, W = depth_map.shape
-    fig, ax = plt.subplots()
-
-    # Probability overlay (start-grid domain)
-    finite = prob_map[np.isfinite(prob_map)]
-    vmax = float(np.nanmax(finite)) if finite.size else 1.0
-    if vmax <= 0.0 or not np.isfinite(vmax):
-        vmax = 1.0
-    extent = [float(x0_grid[0]) - 0.5,
-              float(x0_grid[-1]) + 0.5,
-              float(y0_grid[0]) - 0.5,
-              float(y0_grid[-1]) + 0.5]
-    # 'inferno' colormap: black low, bright yellow/white high
-    im = ax.imshow(prob_map, origin="lower", cmap="inferno", vmin=0.0, vmax=vmax,
-                   interpolation="nearest", extent=extent, alpha=1.0)
-    cb = fig.colorbar(im, ax=ax, shrink=0.9)
-    cb.set_label("Probability")
-
-    # Subtle land overlay
-    if mask is not None:
-        land = ~mask
-        if np.any(land):
-            overlay = np.zeros((H, W, 4), dtype=float)
-            overlay[land] = [1.0, 0.0, 0.0, 0.12]
-            ax.imshow(overlay, origin="lower", interpolation="nearest")
-
-    # True trajectory so far and current point
-    if true_traj is not None:
-        ax.plot(true_traj.xs, true_traj.ys, color="#1f9e5a", linewidth=2.0, alpha=0.8, label="True trajectory")
-        ax.scatter([true_traj.xs[-1]], [true_traj.ys[-1]], marker="+", s=300, color="#1f9e5a", linewidths=2.5,
-                   label="True current")
-
-    # Top-k candidate end points
-    if topk:
-        # Small identical black circles for top-k
-        for j, cand in enumerate(topk):
-            ax.scatter([cand.xs[-1]], [cand.ys[-1]], s=36, facecolors='none', edgecolors='black', linewidths=1.5,
-                       label=("Top-K predicted starts" if j == 0 else None))
-        # Best candidate: red cross at end point
-        best = topk[0]
-        ax.scatter([best.xs[-1]], [best.ys[-1]], marker='x', s=200, linewidths=2.5, color='#ff1a1a', label='Best')
-
-    ax.set_title(title)
-    ax.set_xlabel("x (px)")
-    ax.set_ylabel("y (px)")
-    ax.set_aspect('equal')
-    _legend_with_bg(ax, loc="upper right")
-    return fig
 
 
 
