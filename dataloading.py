@@ -31,15 +31,32 @@ class BathyDataset:
     resolution_m: float          # meters/pixel (approx or from CRS)
 # ---- Raster loading ----
 def _estimate_resolution_m(transform, crs, H: int, W: int, fallback: float) -> float:
+    """Estimate resolution in meters per pixel.
+    For projected CRS: uses transform.a directly
+    For geographic CRS: averages x and y resolution in meters
+    """
     try:
-        px_w = abs(transform.a)
+        px_w = abs(transform.a)  # deg/px in x
+        px_h = abs(transform.e)  # deg/px in y (generally negative value)
+        
         if crs and getattr(crs, "is_projected", False):
+            # For projected CRS, return pixel width directly (assuming square pixels)
             return float(px_w)
+        
+        # For geographic CRS, convert both axes to meters and average
         _, lat0 = transform * (0, 0)
         _, lat1 = transform * (W, H)
         lat_mid = (lat0 + lat1) / 2.0
-        meters_per_deg_lon = 111320.0 * np.cos(np.radians(lat_mid))
-        return float(px_w * meters_per_deg_lon)
+        
+        # Convert degrees to meters
+        m_per_deg_lon = 111320.0 * np.cos(np.radians(lat_mid))
+        m_per_deg_lat = 110540.0
+        
+        # Resolution in meters for each axis
+        rx = px_w * m_per_deg_lon
+        ry = px_h * m_per_deg_lat
+        
+        return float((rx + ry) * 0.5)
     except Exception:
         return fallback
 
@@ -81,10 +98,10 @@ def _load_first_bag_as_array(data_dir: str):
             *ds.bounds  # Use full bounds of the dataset
         )
         
-        # Create destination array for full reprojection
-        dst_arr = np.empty((dst_height, dst_width), dtype=np.float32)
+        # Create destination array for full reprojection with NaN as default
+        dst_arr = np.full((dst_height, dst_width), np.nan, dtype=np.float32)
         
-        # Reproject the full bathymetry data
+        # Reproject the full bathymetry data with proper nodata handling
         reproject(
             source=arr,
             destination=dst_arr,
@@ -92,7 +109,9 @@ def _load_first_bag_as_array(data_dir: str):
             src_crs=src_crs,
             dst_transform=dst_transform,
             dst_crs=dst_crs,
-            resampling=Resampling.bilinear
+            resampling=Resampling.bilinear,
+            src_nodata=nodata,
+            dst_nodata=np.nan,
         )
         
         print(f"[raster] Size after full reprojection: {dst_height} x {dst_width}")
@@ -118,14 +137,9 @@ def _load_first_bag_as_array(data_dir: str):
                 # Crop the reprojected array
                 dst_arr = dst_arr[ymin_i:ymax_i, xmin_i:xmax_i]
                 
-                # Update the transform for the cropped area
-                dst_transform = rasterio.transform.from_bounds(
-                    dst_transform.c + xmin_i * dst_transform.a,  # left
-                    dst_transform.f + ymax_i * dst_transform.e,  # bottom  
-                    dst_transform.c + xmax_i * dst_transform.a,  # right
-                    dst_transform.f + ymin_i * dst_transform.e,  # top
-                    w, h
-                )
+                # Update the transform for the cropped area using rasterio API
+                win = Window(xmin_i, ymin_i, w, h)
+                dst_transform = rasterio.windows.transform(win, dst_transform)
                 
                 print(f"[raster] Crop in projected space (px): x=[{xmin_i},{xmax_i}), y=[{ymin_i},{ymax_i}) -> {w}×{h}")
                 
@@ -138,16 +152,15 @@ def _load_first_bag_as_array(data_dir: str):
                 raise ValueError("CONFIG.crop_by must be 'px' or 'crs'.")
 
     # Clean NaN / NoData / extremes → mask
-    mask = np.ones_like(dst_arr, dtype=bool)
-    if np.isnan(dst_arr).any():
-        mask &= ~np.isnan(dst_arr)
+    # mask: True = water/valid
+    mask = np.isfinite(dst_arr)
     if nodata is not None:
         mask &= (dst_arr != nodata)
     extreme = (dst_arr < -12000) | (dst_arr > 10000)
     mask &= ~extreme
 
     # Fill invalid with median for robust sampling
-    med = float(np.median(dst_arr[mask])) if mask.any() else 0.0
+    med = float(np.nanmedian(dst_arr[mask])) if mask.any() else 0.0
     arr_clean = dst_arr.copy()
     arr_clean[~mask] = med
 
