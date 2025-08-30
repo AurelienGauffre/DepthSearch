@@ -7,11 +7,15 @@ import numpy as np
 import shutil
 import matplotlib.pyplot as plt
 
+import jax
+import jax.numpy as jnp
+
+
 from configs import CONFIG
 from dataloading import load_bathy, BathyDataset
 from plotting import (
     plot_map_with_points, plot_profile_match,
-    setup_matplotlib_theme, plot_mse_map, plot_topk_starts_on_map,
+    setup_matplotlib_theme, plot_topk_starts_on_map,
     plot_accuracy_vs_param,
 )
 from trajectory import (
@@ -22,6 +26,9 @@ from solver import (
     profile_along_line,
     solverGridSearch,
 )
+
+from solver_jax import solverGridSearchJax
+
 
 if __name__ == "__main__":
     # This main function essentially runs 2 nested loops : s different scenarios with v sweep values
@@ -87,11 +94,24 @@ if __name__ == "__main__":
                 step=step_px, n=n, bilinear=CONFIG.bilinear
             )
 
-            topk, mse_map = solverGridSearch(depth_map, valid_mask, traj.depths_noisy,
-                                         step=step_px, n=n, theta=theta_true,
-                                         x0_grid=x0_grid, y0_grid=y0_grid,
-                                         fit_bias=CONFIG.fit_bias,
-                                         valid_grid_mask=valid_grid_mask)
+            # topk, mse_map = solverGridSearch(depth_map, valid_mask, traj.depths_noisy,
+            #                              step=step_px, n=n, theta=theta_true,
+            #                              x0_grid=x0_grid, y0_grid=y0_grid,
+            #                              fit_bias=CONFIG.fit_bias,
+            #                              valid_grid_mask=valid_grid_mask)
+            
+            topk, mse_map = solverGridSearchJax(
+                depth_map=depth_map,                       
+                z_meas=traj.depths_noisy,
+                step=float(step_px),
+                n=int(n),
+                theta=float(theta_true),
+                x0_grid=jnp.asarray(x0_grid, dtype=jnp.float32),
+                y0_grid=jnp.asarray(y0_grid, dtype=jnp.float32),
+                valid_grid_mask=jnp.asarray(valid_grid_mask) if valid_grid_mask is not None else None,
+                k=CONFIG.topk,
+            )
+
             best = topk[0]
 
             subtitle = f"res≈{ds.resolution_m:.0f} m/px | step={step_px:.2f} px | n={n} | θ={math.degrees(theta_true):.1f}°"
